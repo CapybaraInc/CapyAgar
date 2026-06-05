@@ -8,20 +8,20 @@
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#0d1117;display:flex;justify-content:center;align-items:center;height:100vh;overflow:hidden;font-family:'Segoe UI',system-ui,sans-serif;touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
 .game-wrapper{position:relative;width:100vw;height:100vh;max-width:500px;max-height:100vh;overflow:hidden;background:#1a1a2e;border:2px solid #2a2a3e}
-canvas{display:block;position:absolute;top:0;left:0;pointer-events:none}
+canvas{display:block;position:absolute;top:0;left:0;z-index:1}
 .hud{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:10;pointer-events:none}
 .hud-score{background:rgba(0,0,0,0.75);color:#FFD700;padding:8px 18px;border-radius:20px;font-size:16px;font-weight:bold;border:1px solid rgba(255,215,0,0.3);backdrop-filter:blur(8px);text-align:center}
 .leaderboard{position:absolute;top:60px;right:8px;background:rgba(0,0,0,0.8);border-radius:12px;padding:10px;z-index:10;pointer-events:none;border:1px solid rgba(255,255,255,0.2);min-width:110px;color:#ddd;font-size:9px}
 .leaderboard-title{color:#FFD700;font-size:10px;font-weight:bold;text-align:center;margin-bottom:4px}
 .leaderboard-item{display:flex;justify-content:space-between;padding:1px 4px}
 .leaderboard-item.me{color:#FF8C00;font-weight:bold}
-.menu-overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(10,10,26,0.95);z-index:200;display:flex;align-items:center;justify-content:center}
-.menu-box{text-align:center;color:white;padding:20px}
+.menu-overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(10,10,26,0.95);z-index:100;display:flex;align-items:center;justify-content:center}
+.menu-box{text-align:center;color:white;padding:20px;z-index:101}
 .menu-logo{font-size:60px;animation:float 2s ease-in-out infinite}
 @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-15px)}}
 .menu-title{font-size:28px;color:#FFD700;font-weight:bold;margin:10px 0;text-shadow:0 0 20px rgba(255,215,0,0.5)}
 .menu-subtitle{color:#aaa;font-size:12px;margin-bottom:25px}
-.menu-btn{display:block;width:220px;margin:10px auto;padding:14px;border-radius:25px;border:none;font-size:16px;font-weight:bold;cursor:pointer;transition:all 0.2s;pointer-events:auto}
+.menu-btn{display:block;width:220px;margin:10px auto;padding:14px;border-radius:25px;border:none;font-size:16px;font-weight:bold;cursor:pointer;transition:all 0.2s;position:relative;z-index:102}
 .menu-btn:active{transform:scale(0.95)}
 .btn-online{background:linear-gradient(135deg,#FF8C00,#FF4500);color:white;box-shadow:0 0 20px rgba(255,140,0,0.4);font-size:18px}
 .btn-single{background:rgba(255,255,255,0.1);color:#ddd;border:1px solid rgba(255,255,255,0.2)}
@@ -61,300 +61,318 @@ canvas{display:block;position:absolute;top:0;left:0;pointer-events:none}
 </div>
 
 <script>
-// ========== CAPYAGAR ==========
-const wrapper = document.getElementById('wrapper');
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-const hud = document.getElementById('hud');
-const leaderboard = document.getElementById('leaderboard');
-const lbList = document.getElementById('lbList');
-const massEl = document.getElementById('mass');
-const playersEl = document.getElementById('players');
-const menu = document.getElementById('menu');
-const deadScreen = document.getElementById('deadScreen');
+(function() {
+    // ========== DOM ==========
+    var wrapper = document.getElementById('wrapper');
+    var canvas = document.getElementById('canvas');
+    var ctx = canvas.getContext('2d');
+    var hud = document.getElementById('hud');
+    var leaderboard = document.getElementById('leaderboard');
+    var lbList = document.getElementById('lbList');
+    var massEl = document.getElementById('mass');
+    var playersEl = document.getElementById('players');
+    var menu = document.getElementById('menu');
+    var deadScreen = document.getElementById('deadScreen');
 
-let gameState = { players: [], foods: [] };
-let camera = { x: 0, y: 0 };
-let mouse = { x: 0, y: 0 };
-let myId = 'me';
-let mode = 'menu';
+    // ========== СОСТОЯНИЕ ==========
+    var gameState = { players: [], foods: [] };
+    var camera = { x: 0, y: 0 };
+    var mouse = { x: 0, y: 0 };
+    var mode = 'menu';
 
-// ========== ЕДА ==========
-function spawnFood() {
-    gameState.foods = [];
-    for (let i = 0; i < 200; i++) {
-        gameState.foods.push({
-            x: Math.random() * 3000,
-            y: Math.random() * 3000,
-            radius: 4 + Math.random() * 5,
-            color: ['#FF8C00','#FFA500','#FFB347','#FFD700'][Math.floor(Math.random()*4)]
-        });
-    }
-}
-
-// ========== БОТЫ ==========
-function spawnBots() {
-    const names = ['🦝 Енот','🦊 Лис','🐺 Волк','🐍 Змея','🐗 Кабан','🐸 Жаба','🦅 Орёл','🐻 Медведь'];
-    for (let i = 0; i < 12; i++) {
-        gameState.players.push({
-            id: 'bot_' + i,
-            x: Math.random() * 3000,
-            y: Math.random() * 3000,
-            mass: 8 + Math.random() * 25,
-            color: '#' + Math.floor(Math.random()*16777215).toString(16),
-            name: names[i],
-            isBot: true,
-            vx: (Math.random() - 0.5) * 1.5,
-            vy: (Math.random() - 0.5) * 1.5,
-            aiTimer: Math.floor(Math.random() * 80)
-        });
-    }
-}
-
-// ========== КНОПКИ ==========
-document.getElementById('btnOnline').addEventListener('click', function() {
-    alert('🌐 Для онлайна нужен сервер.\nЗапусти server.js через Node.js\nили играй в одиночном режиме!');
-});
-
-document.getElementById('btnSingle').addEventListener('click', function() {
-    mode = 'single';
-    menu.classList.add('hidden');
-    hud.classList.remove('hidden');
-    leaderboard.classList.remove('hidden');
-    gameState.players = [];
-    spawnFood();
-    spawnBots();
-    gameState.players.push({
-        id: 'me', x: 1500, y: 1500, mass: 10,
-        color: '#8B6914', name: '🦫 Капибара', isMe: true
-    });
-});
-
-document.getElementById('btnRespawn').addEventListener('click', function() {
-    deadScreen.classList.add('hidden');
-    hud.classList.remove('hidden');
-    leaderboard.classList.remove('hidden');
-    gameState.players = [];
-    spawnFood();
-    spawnBots();
-    gameState.players.push({
-        id: 'me', x: 1500, y: 1500, mass: 10,
-        color: '#8B6914', name: '🦫 Капибара', isMe: true
-    });
-    mode = 'single';
-});
-
-document.getElementById('btnMenu').addEventListener('click', function() {
-    location.reload();
-});
-
-// ========== ОТРИСОВКА ==========
-function drawGrid() {
-    ctx.strokeStyle = 'rgba(255,255,255,0.03)';
-    ctx.lineWidth = 1;
-    const gs = 50;
-    const sx = Math.floor((camera.x % gs) - gs);
-    const sy = Math.floor((camera.y % gs) - gs);
-    for (let x = sx; x < canvas.width + gs; x += gs) {
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
-    }
-    for (let y = sy; y < canvas.height + gs; y += gs) {
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
-    }
-}
-
-function drawEntity(x, y, r, color, name, isMe) {
-    const sx = x - camera.x, sy = y - camera.y;
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.beginPath(); ctx.arc(sx+2, sy+2, r, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = color;
-    ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI*2); ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
-    ctx.lineWidth = isMe ? 3 : 1.5;
-    ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,0.2)';
-    ctx.beginPath(); ctx.arc(sx-r*0.3, sy-r*0.3, r*0.35, 0, Math.PI*2); ctx.fill();
-    
-    if (isMe) {
-        const ey = sy - r*0.2, es = r*0.35;
-        ctx.fillStyle = 'white';
-        ctx.beginPath(); ctx.arc(sx-es, ey, r*0.2, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(sx+es, ey, r*0.2, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = '#1a1a1a';
-        ctx.beginPath(); ctx.arc(sx-es, ey, r*0.11, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(sx+es, ey, r*0.11, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = '#3a2000';
-        ctx.beginPath(); ctx.arc(sx, sy+r*0.25, r*0.15, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = '#FF8C00';
-        ctx.beginPath(); ctx.arc(sx, sy-r*0.7, r*0.17, 0, Math.PI*2); ctx.fill();
-    }
-    
-    ctx.fillStyle = 'white';
-    ctx.font = `bold ${Math.max(9, r*0.3)}px 'Segoe UI'`;
-    ctx.textAlign = 'center';
-    ctx.fillText(name, sx, sy - r - 6);
-}
-
-function draw() {
-    ctx.fillStyle = '#1a1a2e';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    drawGrid();
-    
-    gameState.foods.forEach(f => {
-        const sx = f.x - camera.x, sy = f.y - camera.y;
-        ctx.fillStyle = f.color;
-        ctx.beginPath(); ctx.arc(sx, sy, f.radius, 0, Math.PI*2); ctx.fill();
-    });
-    
-    gameState.players.forEach(p => {
-        drawEntity(p.x, p.y, Math.sqrt(p.mass)*3, p.color, p.name, p.isMe);
-    });
-    
-    const me = gameState.players.find(p => p.isMe);
-    if (me) {
-        massEl.textContent = Math.floor(me.mass);
-        playersEl.textContent = gameState.players.length;
-        camera.x += (me.x - canvas.width/2 - camera.x) * 0.1;
-        camera.y += (me.y - canvas.height/2 - camera.y) * 0.1;
-    }
-    
-    const sorted = [...gameState.players].sort((a,b) => b.mass - a.mass);
-    lbList.innerHTML = sorted.slice(0,5).map((p,i) => 
-        `<div class="leaderboard-item${p.isMe?' me':''}"><span>${i+1}. ${p.name}</span><span>${Math.floor(p.mass)}</span></div>`
-    ).join('');
-}
-
-// ========== ОБНОВЛЕНИЕ ==========
-function update() {
-    if (mode !== 'single') return;
-    
-    const me = gameState.players.find(p => p.isMe);
-    if (!me) return;
-    
-    const tx = mouse.x + camera.x, ty = mouse.y + camera.y;
-    const dx = tx - me.x, dy = ty - me.y;
-    const dist = Math.sqrt(dx*dx + dy*dy);
-    if (dist > 3) {
-        const speed = 5 / Math.sqrt(me.mass/10);
-        me.x += (dx/dist) * speed;
-        me.y += (dy/dist) * speed;
-    }
-    const r = Math.sqrt(me.mass)*3;
-    me.x = Math.max(r, Math.min(3000-r, me.x));
-    me.y = Math.max(r, Math.min(3000-r, me.y));
-    if (me.mass > 10) me.mass -= 0.001;
-    
-    // Еда
-    gameState.foods = gameState.foods.filter(f => {
-        if (Math.hypot(me.x-f.x, me.y-f.y) < r + f.radius) {
-            me.mass += 0.5;
-            return false;
-        }
-        return true;
-    });
-    
-    // Боты
-    gameState.players.forEach(b => {
-        if (!b.isBot) return;
-        b.aiTimer--;
-        if (b.aiTimer <= 0) {
-            b.vx = (Math.random()-0.5)*2;
-            b.vy = (Math.random()-0.5)*2;
-            b.aiTimer = Math.floor(Math.random()*80)+30;
-        }
-        b.x += b.vx; b.y += b.vy;
-        const br = Math.sqrt(b.mass)*3;
-        b.x = Math.max(br, Math.min(3000-br, b.x));
-        b.y = Math.max(br, Math.min(3000-br, b.y));
-        if (b.mass > 10) b.mass -= 0.0005;
-        
-        gameState.foods = gameState.foods.filter(f => {
-            if (Math.hypot(b.x-f.x, b.y-f.y) < br + f.radius) {
-                b.mass += 0.4;
-                return false;
-            }
-            return true;
-        });
-    });
-    
-    // Поедание ботов
-    gameState.players = gameState.players.filter(b => {
-        if (!b.isBot) return true;
-        if (Math.hypot(me.x-b.x, me.y-b.y) < r + Math.sqrt(b.mass)*3 - 4 && me.mass > b.mass*1.05) {
-            me.mass += b.mass * 0.6;
-            return false;
-        }
-        return true;
-    });
-    
-    // Боты едят игрока
-    gameState.players.forEach(b => {
-        if (!b.isBot) return;
-        if (Math.hypot(me.x-b.x, me.y-b.y) < r + Math.sqrt(b.mass)*3 - 4 && b.mass > me.mass*1.1) {
-            deadScreen.classList.remove('hidden');
-            hud.classList.add('hidden');
-            leaderboard.classList.add('hidden');
-            mode = 'dead';
-        }
-    });
-    
-    if (gameState.foods.length < 200) {
-        for (let i=0; i<5; i++) {
+    // ========== ЕДА ==========
+    function spawnFood() {
+        gameState.foods = [];
+        for (var i = 0; i < 200; i++) {
             gameState.foods.push({
-                x: Math.random()*3000, y: Math.random()*3000,
-                radius: 4+Math.random()*5, color: '#FF8C00'
+                x: Math.random() * 3000,
+                y: Math.random() * 3000,
+                radius: 4 + Math.random() * 5,
+                color: ['#FF8C00','#FFA500','#FFB347','#FFD700'][Math.floor(Math.random()*4)]
             });
         }
     }
-    if (gameState.players.filter(p=>p.isBot).length < 12) {
-        const names = ['🦝 Енот','🦊 Лис','🐺 Волк','🐍 Змея','🐗 Кабан'];
+
+    // ========== БОТЫ ==========
+    function spawnBots() {
+        var names = ['🦝 Енот','🦊 Лис','🐺 Волк','🐍 Змея','🐗 Кабан','🐸 Жаба','🦅 Орёл','🐻 Медведь'];
+        for (var i = 0; i < 12; i++) {
+            gameState.players.push({
+                id: 'bot_' + i,
+                x: Math.random() * 3000,
+                y: Math.random() * 3000,
+                mass: 8 + Math.random() * 25,
+                color: '#' + Math.floor(Math.random()*16777215).toString(16),
+                name: names[i],
+                isBot: true,
+                vx: (Math.random() - 0.5) * 1.5,
+                vy: (Math.random() - 0.5) * 1.5,
+                aiTimer: Math.floor(Math.random() * 80)
+            });
+        }
+    }
+
+    // ========== СТАРТ ИГРЫ ==========
+    function startGame() {
+        mode = 'single';
+        menu.classList.add('hidden');
+        deadScreen.classList.add('hidden');
+        hud.classList.remove('hidden');
+        leaderboard.classList.remove('hidden');
+        gameState.players = [];
+        spawnFood();
+        spawnBots();
         gameState.players.push({
-            id: 'bot_'+Date.now(), x: Math.random()*3000, y: Math.random()*3000,
-            mass: 8+Math.random()*20, color: '#'+Math.floor(Math.random()*16777215).toString(16),
-            name: names[Math.floor(Math.random()*names.length)], isBot: true,
-            vx: (Math.random()-0.5)*1.5, vy: (Math.random()-0.5)*1.5, aiTimer: 50
+            id: 'me', x: 1500, y: 1500, mass: 10,
+            color: '#8B6914', name: '🦫 Капибара', isMe: true
         });
     }
-}
 
-// ========== ВВОД ==========
-function resize() {
-    canvas.width = wrapper.clientWidth;
-    canvas.height = wrapper.clientHeight;
-}
+    // ========== КНОПКИ ==========
+    document.getElementById('btnOnline').onclick = function() {
+        alert('🌐 Для онлайна нужен сервер Node.js\nЗапусти: node server.js');
+    };
 
-wrapper.addEventListener('mousemove', function(e) {
-    var rect = wrapper.getBoundingClientRect();
-    mouse.x = e.clientX - rect.left;
-    mouse.y = e.clientY - rect.top;
-});
+    document.getElementById('btnSingle').onclick = function() {
+        startGame();
+    };
 
-wrapper.addEventListener('touchmove', function(e) {
-    e.preventDefault();
-    var rect = wrapper.getBoundingClientRect();
-    mouse.x = e.touches[0].clientX - rect.left;
-    mouse.y = e.touches[0].clientY - rect.top;
-}, {passive: false});
+    document.getElementById('btnRespawn').onclick = function() {
+        startGame();
+    };
 
-wrapper.addEventListener('touchstart', function(e) {
-    e.preventDefault();
-    var rect = wrapper.getBoundingClientRect();
-    mouse.x = e.touches[0].clientX - rect.left;
-    mouse.y = e.touches[0].clientY - rect.top;
-}, {passive: false});
+    document.getElementById('btnMenu').onclick = function() {
+        location.reload();
+    };
 
-window.addEventListener('resize', resize);
+    // ========== ОТРИСОВКА ==========
+    function drawGrid() {
+        ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+        ctx.lineWidth = 1;
+        var gs = 50;
+        var sx = Math.floor((camera.x % gs) - gs);
+        var sy = Math.floor((camera.y % gs) - gs);
+        for (var x = sx; x < canvas.width + gs; x += gs) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+        }
+        for (var y = sy; y < canvas.height + gs; y += gs) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+        }
+    }
 
-// ========== ЦИКЛ ==========
-function gameLoop() {
-    update();
-    draw();
-    requestAnimationFrame(gameLoop);
-}
+    function drawEntity(x, y, r, color, name, isMe) {
+        var sx = x - camera.x, sy = y - camera.y;
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath(); ctx.arc(sx+2, sy+2, r, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+        ctx.lineWidth = isMe ? 3 : 1.5;
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(255,255,255,0.2)';
+        ctx.beginPath(); ctx.arc(sx-r*0.3, sy-r*0.3, r*0.35, 0, Math.PI*2); ctx.fill();
+        
+        if (isMe) {
+            var ey = sy - r*0.2, es = r*0.35;
+            ctx.fillStyle = 'white';
+            ctx.beginPath(); ctx.arc(sx-es, ey, r*0.2, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(sx+es, ey, r*0.2, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#1a1a1a';
+            ctx.beginPath(); ctx.arc(sx-es, ey, r*0.11, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(sx+es, ey, r*0.11, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#3a2000';
+            ctx.beginPath(); ctx.arc(sx, sy+r*0.25, r*0.15, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#FF8C00';
+            ctx.beginPath(); ctx.arc(sx, sy-r*0.7, r*0.17, 0, Math.PI*2); ctx.fill();
+        }
+        
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold ' + Math.max(9, r*0.3) + 'px Segoe UI';
+        ctx.textAlign = 'center';
+        ctx.fillText(name, sx, sy - r - 6);
+    }
 
-resize();
-gameLoop();
-console.log('🦫 CapyAgar готов!');
+    function draw() {
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        drawGrid();
+        
+        for (var i = 0; i < gameState.foods.length; i++) {
+            var f = gameState.foods[i];
+            var sx = f.x - camera.x, sy = f.y - camera.y;
+            ctx.fillStyle = f.color;
+            ctx.beginPath(); ctx.arc(sx, sy, f.radius, 0, Math.PI*2); ctx.fill();
+        }
+        
+        for (var j = 0; j < gameState.players.length; j++) {
+            var p = gameState.players[j];
+            drawEntity(p.x, p.y, Math.sqrt(p.mass)*3, p.color, p.name, p.isMe);
+        }
+        
+        var me = null;
+        for (var k = 0; k < gameState.players.length; k++) {
+            if (gameState.players[k].isMe) { me = gameState.players[k]; break; }
+        }
+        if (me) {
+            massEl.textContent = Math.floor(me.mass);
+            playersEl.textContent = gameState.players.length;
+            camera.x += (me.x - canvas.width/2 - camera.x) * 0.1;
+            camera.y += (me.y - canvas.height/2 - camera.y) * 0.1;
+        }
+        
+        var sorted = gameState.players.slice().sort(function(a,b) { return b.mass - a.mass; });
+        var html = '';
+        for (var m = 0; m < Math.min(5, sorted.length); m++) {
+            var p = sorted[m];
+            html += '<div class="leaderboard-item' + (p.isMe ? ' me' : '') + '"><span>' + (m+1) + '. ' + p.name + '</span><span>' + Math.floor(p.mass) + '</span></div>';
+        }
+        lbList.innerHTML = html;
+    }
+
+    // ========== ОБНОВЛЕНИЕ ==========
+    function update() {
+        if (mode !== 'single') return;
+        
+        var me = null;
+        for (var i = 0; i < gameState.players.length; i++) {
+            if (gameState.players[i].isMe) { me = gameState.players[i]; break; }
+        }
+        if (!me) return;
+        
+        var tx = mouse.x + camera.x, ty = mouse.y + camera.y;
+        var dx = tx - me.x, dy = ty - me.y;
+        var dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist > 3) {
+            var speed = 5 / Math.sqrt(me.mass/10);
+            me.x += (dx/dist) * speed;
+            me.y += (dy/dist) * speed;
+        }
+        var r = Math.sqrt(me.mass)*3;
+        me.x = Math.max(r, Math.min(3000-r, me.x));
+        me.y = Math.max(r, Math.min(3000-r, me.y));
+        if (me.mass > 10) me.mass -= 0.001;
+        
+        // Еда
+        for (var j = gameState.foods.length-1; j >= 0; j--) {
+            var f = gameState.foods[j];
+            if (Math.hypot(me.x-f.x, me.y-f.y) < r + f.radius) {
+                me.mass += 0.5;
+                gameState.foods.splice(j, 1);
+            }
+        }
+        
+        // Боты
+        for (var k = 0; k < gameState.players.length; k++) {
+            var b = gameState.players[k];
+            if (!b.isBot) continue;
+            b.aiTimer--;
+            if (b.aiTimer <= 0) {
+                b.vx = (Math.random()-0.5)*2;
+                b.vy = (Math.random()-0.5)*2;
+                b.aiTimer = Math.floor(Math.random()*80)+30;
+            }
+            b.x += b.vx; b.y += b.vy;
+            var br = Math.sqrt(b.mass)*3;
+            b.x = Math.max(br, Math.min(3000-br, b.x));
+            b.y = Math.max(br, Math.min(3000-br, b.y));
+            if (b.mass > 10) b.mass -= 0.0005;
+            
+            for (var n = gameState.foods.length-1; n >= 0; n--) {
+                var ff = gameState.foods[n];
+                if (Math.hypot(b.x-ff.x, b.y-ff.y) < br + ff.radius) {
+                    b.mass += 0.4;
+                    gameState.foods.splice(n, 1);
+                }
+            }
+        }
+        
+        // Поедание ботов
+        for (var p = gameState.players.length-1; p >= 0; p--) {
+            var bot = gameState.players[p];
+            if (!bot.isBot) continue;
+            if (Math.hypot(me.x-bot.x, me.y-bot.y) < r + Math.sqrt(bot.mass)*3 - 4 && me.mass > bot.mass*1.05) {
+                me.mass += bot.mass * 0.6;
+                gameState.players.splice(p, 1);
+            }
+        }
+        
+        // Боты едят игрока
+        for (var q = 0; q < gameState.players.length; q++) {
+            var enemy = gameState.players[q];
+            if (!enemy.isBot) continue;
+            if (Math.hypot(me.x-enemy.x, me.y-enemy.y) < r + Math.sqrt(enemy.mass)*3 - 4 && enemy.mass > me.mass*1.1) {
+                deadScreen.classList.remove('hidden');
+                hud.classList.add('hidden');
+                leaderboard.classList.add('hidden');
+                mode = 'dead';
+                return;
+            }
+        }
+        
+        // Доспавн
+        if (gameState.foods.length < 200) {
+            for (var s = 0; s < 5; s++) {
+                gameState.foods.push({
+                    x: Math.random()*3000, y: Math.random()*3000,
+                    radius: 4+Math.random()*5, color: '#FF8C00'
+                });
+            }
+        }
+        
+        var botCount = 0;
+        for (var t = 0; t < gameState.players.length; t++) {
+            if (gameState.players[t].isBot) botCount++;
+        }
+        if (botCount < 12) {
+            var names = ['🦝 Енот','🦊 Лис','🐺 Волк','🐍 Змея','🐗 Кабан'];
+            gameState.players.push({
+                id: 'bot_'+Date.now(), x: Math.random()*3000, y: Math.random()*3000,
+                mass: 8+Math.random()*20, color: '#'+Math.floor(Math.random()*16777215).toString(16),
+                name: names[Math.floor(Math.random()*names.length)], isBot: true,
+                vx: (Math.random()-0.5)*1.5, vy: (Math.random()-0.5)*1.5, aiTimer: 50
+            });
+        }
+    }
+
+    // ========== ВВОД ==========
+    function resize() {
+        canvas.width = wrapper.clientWidth;
+        canvas.height = wrapper.clientHeight;
+    }
+
+    wrapper.addEventListener('mousemove', function(e) {
+        var rect = wrapper.getBoundingClientRect();
+        mouse.x = e.clientX - rect.left;
+        mouse.y = e.clientY - rect.top;
+    });
+
+    wrapper.addEventListener('touchmove', function(e) {
+        e.preventDefault();
+        var rect = wrapper.getBoundingClientRect();
+        mouse.x = e.touches[0].clientX - rect.left;
+        mouse.y = e.touches[0].clientY - rect.top;
+    }, {passive: false});
+
+    wrapper.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        var rect = wrapper.getBoundingClientRect();
+        mouse.x = e.touches[0].clientX - rect.left;
+        mouse.y = e.touches[0].clientY - rect.top;
+    }, {passive: false});
+
+    window.addEventListener('resize', resize);
+
+    // ========== ЦИКЛ ==========
+    function gameLoop() {
+        update();
+        draw();
+        requestAnimationFrame(gameLoop);
+    }
+
+    resize();
+    gameLoop();
+    console.log('🦫 CapyAgar готов! Кнопки работают!');
+})();
 </script>
 </body>
 </html>
