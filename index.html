@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>CapyAgar Online</title>
+<title>CapyAgar</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#0d1117;display:flex;justify-content:center;align-items:center;height:100vh;overflow:hidden;font-family:'Segoe UI',system-ui,sans-serif;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none}
@@ -15,140 +15,241 @@ canvas{display:block;position:absolute;top:0;left:0}
 .leaderboard-title{color:#FFD700;font-size:10px;font-weight:bold;text-align:center;margin-bottom:4px}
 .leaderboard-item{display:flex;justify-content:space-between;padding:1px 4px}
 .leaderboard-item.me{color:#FF8C00;font-weight:bold}
-.status{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:white;font-size:18px;z-index:20;text-align:center;background:rgba(0,0,0,0.8);padding:20px 30px;border-radius:15px;display:none}
-.status.visible{display:block}
+
+/* ===== МЕНЮ ===== */
+.menu-overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(10,10,26,0.95);z-index:200;display:flex;align-items:center;justify-content:center}
+.menu-box{text-align:center;color:white;padding:20px}
+.menu-logo{font-size:60px;animation:float 2s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-15px)}}
+.menu-title{font-size:28px;color:#FFD700;font-weight:bold;margin:10px 0;text-shadow:0 0 20px rgba(255,215,0,0.5)}
+.menu-subtitle{color:#aaa;font-size:12px;margin-bottom:25px}
+.menu-btn{display:block;width:220px;margin:10px auto;padding:14px;border-radius:25px;border:none;font-size:16px;font-weight:bold;cursor:pointer;transition:all 0.2s}
+.menu-btn:active{transform:scale(0.95)}
+.btn-online{background:linear-gradient(135deg,#FF8C00,#FF4500);color:white;box-shadow:0 0 20px rgba(255,140,0,0.4);font-size:18px}
+.btn-single{background:rgba(255,255,255,0.1);color:#ddd;border:1px solid rgba(255,255,255,0.2)}
+.btn-how{background:transparent;color:#aaa;font-size:11px;text-decoration:underline}
+.room-info{color:#4fc3f7;font-size:10px;margin-top:8px}
+.hidden{display:none!important}
 </style>
 </head>
 <body>
 <div class="game-wrapper" id="wrapper">
     <canvas id="canvas"></canvas>
-    <div class="hud"><div class="hud-score">🍊 <span id="mass">10</span> | 🦫 <span id="players">1</span></div></div>
-    <div class="leaderboard" id="leaderboard"><div class="leaderboard-title">🏆 Лидеры</div><div id="lbList"></div></div>
-    <div class="status visible" id="status">Подключение...</div>
+    
+    <!-- HUD -->
+    <div class="hud hidden" id="hud">
+        <div class="hud-score">🍊 <span id="mass">10</span> | 🦫 <span id="players">1</span></div>
+    </div>
+    <div class="leaderboard hidden" id="leaderboard">
+        <div class="leaderboard-title">🏆 Лидеры</div>
+        <div id="lbList"></div>
+    </div>
+    <div class="room-info hidden" id="roomInfo"></div>
+
+    <!-- Меню -->
+    <div class="menu-overlay" id="menu">
+        <div class="menu-box">
+            <div class="menu-logo">🦫</div>
+            <div class="menu-title">CapyAgar</div>
+            <div class="menu-subtitle">Ешь апельсины. Расти. Побеждай.</div>
+            <button class="menu-btn btn-online" onclick="playOnline()">🌐 Играть онлайн</button>
+            <button class="menu-btn btn-single" onclick="playSingle()">🎮 Одиночная игра</button>
+            <button class="menu-btn btn-how" onclick="alert('🦫 Двигай мышью или пальцем.\n🍊 Ешь апельсины — растёшь.\n🐺 Ешь тех кто меньше.\n💨 Убегай от больших!')">Как играть?</button>
+        </div>
+    </div>
+
+    <!-- Смерть -->
+    <div class="menu-overlay hidden" id="deadScreen">
+        <div class="menu-box">
+            <div style="font-size:50px">💀</div>
+            <div class="menu-title">Тебя съели!</div>
+            <div class="menu-subtitle">Счёт: <span id="deadScore">0</span></div>
+            <button class="menu-btn btn-online" onclick="respawn()">🔄 Играть снова</button>
+            <button class="menu-btn btn-single" onclick="location.reload()">🏠 В меню</button>
+        </div>
+    </div>
 </div>
 
 <script>
-// ============================================
-// CapyAgar Online Client
-// ============================================
+// ========== CAPYAGAR CLIENT ==========
 const wrapper = document.getElementById('wrapper');
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
+const hud = document.getElementById('hud');
+const leaderboard = document.getElementById('leaderboard');
+const lbList = document.getElementById('lbList');
 const massEl = document.getElementById('mass');
 const playersEl = document.getElementById('players');
-const lbList = document.getElementById('lbList');
-const statusEl = document.getElementById('status');
+const menu = document.getElementById('menu');
+const deadScreen = document.getElementById('deadScreen');
+const deadScore = document.getElementById('deadScore');
+const roomInfo = document.getElementById('roomInfo');
 
-// ========== WebSocket ==========
-const WS_URL = location.hostname === 'localhost' 
-    ? 'ws://localhost:3000' 
-    : `wss://${location.host}`;
-
+// ========== СОСТОЯНИЕ ==========
 let socket;
-let myId = null;
-let myColor = '#8B6914';
-let myName = 'Капибара';
-let gameState = { players: [], foods: [], leaderboard: [], worldWidth: 3000, worldHeight: 3000 };
+let myId, myColor, myName;
+let gameState = { players: [], foods: [], worldWidth: 3000, worldHeight: 3000 };
 let camera = { x: 0, y: 0 };
 let mouse = { x: 0, y: 0 };
+let mode = 'menu';
+let score = 0;
 let connected = false;
 
-function connect() {
-    statusEl.textContent = '🔄 Подключение...';
-    statusEl.classList.add('visible');
-    
-    socket = new WebSocket(WS_URL);
+// ========== WebSocket ==========
+function connectWebSocket() {
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${location.host}`;
+    socket = new WebSocket(wsUrl);
 
     socket.onopen = () => {
-        console.log('✅ Подключено к серверу');
-        statusEl.textContent = '🦫 Готово! Управляй мышью';
-        setTimeout(() => statusEl.classList.remove('visible'), 1500);
+        console.log('✅ Подключено');
         connected = true;
     };
 
     socket.onmessage = (event) => {
         const msg = JSON.parse(event.data);
-        if (msg.type === 'init') {
+        if (msg.type === 'welcome') {
             myId = msg.data.id;
             myColor = msg.data.color;
             myName = msg.data.name;
+            gameState.worldWidth = msg.data.worldWidth;
+            gameState.worldHeight = msg.data.worldHeight;
+            roomInfo.textContent = `Комната: ${msg.data.roomId}`;
+            roomInfo.classList.remove('hidden');
+            console.log('🦫 Я:', myName);
         } else if (msg.type === 'state') {
             gameState = msg.data;
+        } else if (msg.type === 'dead') {
+            showDeadScreen();
         }
     };
 
     socket.onclose = () => {
         connected = false;
-        statusEl.textContent = '❌ Соединение потеряно. Переподключение...';
-        statusEl.classList.add('visible');
-        setTimeout(connect, 2000);
+        if (mode === 'online') {
+            roomInfo.textContent = '⚠️ Соединение потеряно...';
+        }
     };
 
     socket.onerror = () => {
-        statusEl.textContent = '⚠️ Сервер недоступен. Запусти server.js';
-        statusEl.classList.add('visible');
+        if (mode === 'online') {
+            alert('❌ Сервер недоступен. Играем одиночно!');
+            playSingle();
+        }
     };
 }
 
-// ========== Отправка позиции мыши ==========
-function sendMousePosition() {
-    if (!connected || myId === null) return;
-    const worldX = mouse.x + camera.x;
-    const worldY = mouse.y + camera.y;
-    socket.send(JSON.stringify({ type: 'move', x: worldX, y: worldY }));
+function sendPosition() {
+    if (!connected || !socket || socket.readyState !== WebSocket.OPEN) return;
+    const wx = mouse.x + camera.x;
+    const wy = mouse.y + camera.y;
+    socket.send(JSON.stringify({ type: 'move', x: wx, y: wy }));
 }
 
-// ========== Отрисовка ==========
+// ========== МЕНЮ ==========
+function playOnline() {
+    mode = 'online';
+    menu.classList.add('hidden');
+    hud.classList.remove('hidden');
+    leaderboard.classList.remove('hidden');
+    connectWebSocket();
+}
+
+function playSingle() {
+    mode = 'single';
+    menu.classList.add('hidden');
+    hud.classList.remove('hidden');
+    leaderboard.classList.remove('hidden');
+    // Локальные боты
+    gameState.foods = [];
+    for (let i=0; i<200; i++) {
+        gameState.foods.push({
+            x: Math.random()*3000, y: Math.random()*3000,
+            radius: 4+Math.random()*5,
+            color: ['#FF8C00','#FFA500','#FFB347','#FFD700'][Math.floor(Math.random()*4)]
+        });
+    }
+    // Боты
+    gameState.players = [];
+    const names = ['🦝 Енот','🦊 Лис','🐺 Волк','🐍 Змея','🐗 Кабан','🐸 Жаба','🦅 Орёл','🐻 Медведь','🦀 Краб','🐯 Тигр'];
+    for (let i=0; i<12; i++) {
+        gameState.players.push({
+            id: 'bot_'+i, x: Math.random()*3000, y: Math.random()*3000,
+            mass: 8+Math.random()*25,
+            color: '#'+Math.floor(Math.random()*16777215).toString(16),
+            name: names[i], isBot: true,
+            vx: (Math.random()-0.5)*1.5, vy: (Math.random()-0.5)*1.5,
+            aiTimer: Math.floor(Math.random()*80)
+        });
+    }
+    myId = 'me';
+    myColor = '#8B6914';
+    myName = '🦫 Капибара';
+    // Добавляем себя
+    gameState.players.push({
+        id: 'me', x: 1500, y: 1500, mass: 10,
+        color: myColor, name: myName, isMe: true
+    });
+}
+
+function showDeadScreen() {
+    deadScore.textContent = score;
+    deadScreen.classList.remove('hidden');
+    mode = 'dead';
+}
+
+function respawn() {
+    deadScreen.classList.add('hidden');
+    if (mode === 'dead' && connected) {
+        location.reload();
+    } else {
+        playSingle();
+    }
+}
+
+// ========== ОТРИСОВКА ==========
 function drawGrid() {
-    const GRID = 50;
     ctx.strokeStyle = 'rgba(255,255,255,0.03)';
     ctx.lineWidth = 1;
-    const startX = Math.floor((camera.x % GRID) - GRID);
-    const startY = Math.floor((camera.y % GRID) - GRID);
-    for (let x = startX; x < canvas.width + GRID; x += GRID) {
-        ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); ctx.stroke();
-    }
-    for (let y = startY; y < canvas.height + GRID; y += GRID) {
-        ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(canvas.width,y); ctx.stroke();
-    }
+    const gs = 50;
+    const sx = Math.floor((camera.x%gs)-gs), sy = Math.floor((camera.y%gs)-gs);
+    for (let x=sx; x<canvas.width+gs; x+=gs) {ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,canvas.height);ctx.stroke();}
+    for (let y=sy; y<canvas.height+gs; y+=gs) {ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(canvas.width,y);ctx.stroke();}
 }
 
-function drawCircle(x, y, r, color, isPlayer) {
-    const sx = x - camera.x;
-    const sy = y - camera.y;
-    
+function drawEntity(x, y, r, color, name, isMe) {
+    const sx = x - camera.x, sy = y - camera.y;
     // Тень
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.beginPath(); ctx.arc(sx+2, sy+2, r, 0, Math.PI*2); ctx.fill();
-    
     // Тело
     ctx.fillStyle = color;
     ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI*2); ctx.fill();
     ctx.strokeStyle = 'rgba(0,0,0,0.3)';
-    ctx.lineWidth = isPlayer ? 2.5 : 1.5;
+    ctx.lineWidth = isMe ? 3 : 1.5;
     ctx.stroke();
-    
     // Блик
     ctx.fillStyle = 'rgba(255,255,255,0.2)';
     ctx.beginPath(); ctx.arc(sx-r*0.3, sy-r*0.3, r*0.35, 0, Math.PI*2); ctx.fill();
-    
-    // Глаза (для игрока-капибары)
-    if (isPlayer) {
-        const eyeY = sy - r*0.2;
-        const es = r*0.35;
+    // Глаза (для капибары)
+    if (isMe || name.includes('🦫')) {
+        const ey = sy-r*0.2, es = r*0.35;
         ctx.fillStyle = 'white';
-        ctx.beginPath(); ctx.arc(sx-es, eyeY, r*0.22, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(sx+es, eyeY, r*0.22, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(sx-es, ey, r*0.2, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(sx+es, ey, r*0.2, 0, Math.PI*2); ctx.fill();
         ctx.fillStyle = '#1a1a1a';
-        ctx.beginPath(); ctx.arc(sx-es, eyeY, r*0.12, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(sx+es, eyeY, r*0.12, 0, Math.PI*2); ctx.fill();
-        // Нос
+        ctx.beginPath(); ctx.arc(sx-es, ey, r*0.11, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(sx+es, ey, r*0.11, 0, Math.PI*2); ctx.fill();
         ctx.fillStyle = '#3a2000';
-        ctx.beginPath(); ctx.arc(sx, sy+r*0.25, r*0.16, 0, Math.PI*2); ctx.fill();
-        // Апельсин
+        ctx.beginPath(); ctx.arc(sx, sy+r*0.25, r*0.15, 0, Math.PI*2); ctx.fill();
         ctx.fillStyle = '#FF8C00';
-        ctx.beginPath(); ctx.arc(sx, sy-r*0.7, r*0.18, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(sx, sy-r*0.7, r*0.17, 0, Math.PI*2); ctx.fill();
     }
+    // Имя
+    ctx.fillStyle = 'white';
+    ctx.font = `bold ${Math.max(9,r*0.3)}px 'Segoe UI'`;
+    ctx.textAlign = 'center';
+    ctx.fillText(name, sx, sy-r-6);
 }
 
 function draw() {
@@ -158,56 +259,128 @@ function draw() {
 
     // Еда
     gameState.foods.forEach(f => {
-        const sx = f.x - camera.x;
-        const sy = f.y - camera.y;
+        const sx = f.x-camera.x, sy = f.y-camera.y;
         ctx.fillStyle = f.color;
         ctx.beginPath(); ctx.arc(sx, sy, f.radius, 0, Math.PI*2); ctx.fill();
     });
 
     // Игроки
     gameState.players.forEach(p => {
-        const r = Math.sqrt(p.mass) * 3;
-        const isMe = p.id === myId;
-        drawCircle(p.x, p.y, r, p.color, isMe);
-        
-        // Имя
-        const sx = p.x - camera.x;
-        const sy = p.y - camera.y;
-        ctx.fillStyle = 'white';
-        ctx.font = `bold ${Math.max(9,r*0.3)}px 'Segoe UI'`;
-        ctx.textAlign = 'center';
-        ctx.fillText(p.name, sx, sy - r - 6);
+        const r = Math.sqrt(p.mass)*3;
+        drawEntity(p.x, p.y, r, p.color, p.name, p.id===myId||p.isMe);
     });
 
     // HUD
-    const me = gameState.players.find(p => p.id === myId);
+    const me = gameState.players.find(p => p.id===myId || p.isMe);
     if (me) {
         massEl.textContent = Math.floor(me.mass);
         playersEl.textContent = gameState.players.length;
-        
+        score = Math.floor(me.mass);
         // Камера
-        const tx = me.x - canvas.width/2;
-        const ty = me.y - canvas.height/2;
-        camera.x += (tx - camera.x) * 0.1;
-        camera.y += (ty - camera.y) * 0.1;
+        camera.x += (me.x - canvas.width/2 - camera.x) * 0.1;
+        camera.y += (me.y - canvas.height/2 - camera.y) * 0.1;
     }
 
     // Лидерборд
-    let lb = '';
-    gameState.leaderboard.forEach((p, i) => {
-        lb += `<div class="leaderboard-item${p.id===myId?' me':''}"><span>${i+1}. ${p.name}</span><span>${p.mass}</span></div>`;
+    const sorted = [...gameState.players].sort((a,b) => b.mass - a.mass);
+    lbList.innerHTML = sorted.slice(0,5).map((p,i) => 
+        `<div class="leaderboard-item${(p.id===myId||p.isMe)?' me':''}">
+            <span>${i+1}. ${p.name}</span>
+            <span>${Math.floor(p.mass)}</span>
+        </div>`
+    ).join('');
+}
+
+// ========== ОБНОВЛЕНИЕ (одиночный режим) ==========
+function updateSingle() {
+    const me = gameState.players.find(p => p.isMe);
+    if (!me) return;
+
+    // Движение
+    const tx = mouse.x + camera.x, ty = mouse.y + camera.y;
+    const dx = tx - me.x, dy = ty - me.y;
+    const dist = Math.sqrt(dx*dx+dy*dy);
+    if (dist > 3) {
+        const speed = 5/Math.sqrt(me.mass/10);
+        me.x += (dx/dist)*speed;
+        me.y += (dy/dist)*speed;
+    }
+    const r = Math.sqrt(me.mass)*3;
+    me.x = Math.max(r, Math.min(3000-r, me.x));
+    me.y = Math.max(r, Math.min(3000-r, me.y));
+    if (me.mass > 10) me.mass -= 0.001;
+
+    // Еда
+    gameState.foods = gameState.foods.filter(f => {
+        if (Math.hypot(me.x-f.x, me.y-f.y) < r + f.radius) {
+            me.mass += 0.5;
+            return false;
+        }
+        return true;
     });
-    lbList.innerHTML = lb;
+
+    // Боты
+    gameState.players.forEach(b => {
+        if (b.isMe || !b.isBot) return;
+        b.aiTimer--;
+        if (b.aiTimer <= 0) {
+            b.vx = (Math.random()-0.5)*2;
+            b.vy = (Math.random()-0.5)*2;
+            b.aiTimer = Math.floor(Math.random()*80)+30;
+        }
+        b.x += b.vx;
+        b.y += b.vy;
+        const br = Math.sqrt(b.mass)*3;
+        b.x = Math.max(br, Math.min(3000-br, b.x));
+        b.y = Math.max(br, Math.min(3000-br, b.y));
+        if (b.mass > 10) b.mass -= 0.0005;
+        // Боты едят еду
+        gameState.foods = gameState.foods.filter(f => {
+            if (Math.hypot(b.x-f.x, b.y-f.y) < br + f.radius) {
+                b.mass += 0.4;
+                return false;
+            }
+            return true;
+        });
+    });
+
+    // Поедание ботов
+    gameState.players = gameState.players.filter(b => {
+        if (b.isMe || !b.isBot) return true;
+        if (Math.hypot(me.x-b.x, me.y-b.y) < r + Math.sqrt(b.mass)*3 - 4 && me.mass > b.mass*1.05) {
+            me.mass += b.mass*0.6;
+            return false;
+        }
+        return true;
+    });
+
+    // Боты едят игрока
+    gameState.players.forEach(b => {
+        if (!b.isBot) return;
+        if (Math.hypot(me.x-b.x, me.y-b.y) < r + Math.sqrt(b.mass)*3 - 4 && b.mass > me.mass*1.1) {
+            showDeadScreen();
+        }
+    });
+
+    // Доспавн
+    if (gameState.foods.length < 200) {
+        for (let i=0; i<5; i++) gameState.foods.push({
+            x:Math.random()*3000, y:Math.random()*3000,
+            radius:4+Math.random()*5, color:'#FF8C00'
+        });
+    }
+    if (gameState.players.filter(p=>p.isBot).length < 12) {
+        const names = ['🦝 Енот','🦊 Лис','🐺 Волк','🐍 Змея','🐗 Кабан'];
+        gameState.players.push({
+            id:'bot_'+Date.now(), x:Math.random()*3000, y:Math.random()*3000,
+            mass:8+Math.random()*20, color:'#'+Math.floor(Math.random()*16777215).toString(16),
+            name:names[Math.floor(Math.random()*names.length)], isBot:true,
+            vx:(Math.random()-0.5)*1.5, vy:(Math.random()-0.5)*1.5, aiTimer:50
+        });
+    }
 }
 
-// ========== Игровой цикл ==========
-function gameLoop() {
-    draw();
-    sendMousePosition();
-    requestAnimationFrame(gameLoop);
-}
-
-// ========== Ввод ==========
+// ========== ВВОД ==========
 function resize() {
     canvas.width = wrapper.clientWidth;
     canvas.height = wrapper.clientHeight;
@@ -235,10 +408,18 @@ wrapper.addEventListener('touchstart', e => {
 
 window.addEventListener('resize', resize);
 
-// ========== Старт ==========
+// ========== ИГРОВОЙ ЦИКЛ ==========
+function gameLoop() {
+    if (mode === 'single') updateSingle();
+    if ((mode === 'single' || mode === 'online') && mode !== 'dead') {
+        draw();
+        sendPosition();
+    }
+    requestAnimationFrame(gameLoop);
+}
+
 resize();
-connect();
 gameLoop();
 </script>
 </body>
-</html>
+    </html>
